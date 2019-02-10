@@ -1,0 +1,121 @@
+module stop_watch_if
+(
+input wire clk,
+input wire clr,go,
+output wire [3:0] d0,d1,d2
+);
+
+//declaration
+localparam DVSR = 5000000;
+reg[22:0] ms_reg;
+wire[22:0] ms_next;
+reg [3:0] d2_reg,d1_reg,d0_reg;
+reg [3:0] d2_next,d1_next,d0_next;
+wire ms_tick;
+
+//register
+always@(posedge clk)
+begin
+ms_reg <= ms_next;
+d2_reg <= d2_next;
+d1_reg <= d1_next;
+d0_reg <= d0_next;
+end
+
+//0.1sec tick generator : mod-5000000
+assign ms_next = (clr || (ms_reg == DVSR && go)) ? 4'b0:
+		 (go)?ms_reg+1:ms_reg;
+assign ms_tick = (ms_reg == DVSR)?1'b1:1'b0;
+
+//3_digit BCD counter
+always@*
+begin
+	d0_next = d0_reg;
+	d1_next = d1_reg;
+	d2_next = d2_reg;
+	if (clr)
+		begin
+		d0_next = 4'b0;
+		d1_next = 4'b0;
+		d2_next = 4'b0;
+		end
+	else if (ms_tick)
+	    if(d0_reg != 9)
+		d0_next = d0_reg+1;
+	    else			//reach XX9
+		begin
+		d0_next = 4'b0;
+		if (d1_reg != 9)
+		    d1_next = d1_reg+1;
+		else			//reach X99
+		  begin
+		    d1_next = 4'b0;
+		    if (d2_reg != 9)
+		    	d2_next = d2_reg+1;
+		    else		//reach 999
+			d2_next = 4'b0;
+		  end
+		end
+end
+//output logic
+assign d0 = d0_reg;
+assign d1 = d1_reg;
+assign d2 = d2_reg;
+
+endmodule
+
+//port declaration
+module bin_to_7seg
+(
+//signal declaration
+input wire [3:0]bin,
+output reg [6:0]sseg
+);
+//combinational logic
+always@*
+begin
+case(bin)
+4'h0:sseg=7'b1000000;
+4'h1:sseg=7'b1111001;
+4'h2:sseg=7'b0100100;
+4'h3:sseg=7'b0110000;
+4'h4:sseg=7'b0011001;
+4'h5:sseg=7'b0010010;
+4'h6:sseg=7'b0000010;
+4'h7:sseg=7'b1111000;
+4'h8:sseg=7'b0000000;
+4'h9:sseg=7'b0010000;
+4'ha:sseg=7'b0001000;
+4'hb:sseg=7'b0000011;
+4'hc:sseg=7'b1000110;
+4'hd:sseg=7'b0100001;
+4'he:sseg=7'b0000110;
+default:sseg=7'b0001110;
+endcase
+end
+endmodule
+
+module stop_watch_test
+(
+input wire clk,
+input wire [1:0]key,
+output wire [7:0]hex3,hex2,hex1,hex0
+);
+
+//signal declaration
+wire [3:0] d2,d1,d0;
+wire go,clr;
+
+assign go = ~key[1];
+assign clr = ~key[0];
+
+//instantiate stopwatch
+stop_watch_if counter_unit
+	(.clk(clk), .go(go), .clr(clr),.d2(d2), .d1(d1), .d0(d0));
+
+bin_to_7seg disp_unit_0 (.bin(d0), .sseg(hex0));
+bin_to_7seg disp_unit_1 (.bin(d1), .sseg(hex1));
+bin_to_7seg disp_unit_2 (.bin(d2), .sseg(hex2));
+bin_to_7seg disp_unit_3 (.bin(4'b0000), .sseg(hex3));
+
+endmodule
